@@ -1,3 +1,5 @@
+![Build](https://github.com/Huangjiang-a11y/android-audio-shim-opensl/actions/workflows/build.yml/badge.svg)
+
 # Android Audio Shim — OpenSL ES fork
 
 Enables [Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat) (and any
