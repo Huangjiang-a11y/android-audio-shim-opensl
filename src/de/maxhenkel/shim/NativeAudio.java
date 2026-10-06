@@ -65,4 +65,6 @@ public static native int close(int handle);
 public static native int read(int handle, byte[] buf, int offset, int length);
 // Real number of bytes currently readable without blocking
 public static native int available(int handle);
+// RMS level of the last captured block (0.0 - 1.0)
+public static native float getLevel(int handle);
 }

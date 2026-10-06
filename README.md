@@ -23,6 +23,7 @@ with one substantial change:
 - Mono / stereo, 16-bit PCM, little endian
 - Handle-based, multi-stream capable (up to 4 inputs, 16 outputs)
 - `MASTER_GAIN` output volume control, applied natively with saturation
+- `DataLine.getLevel()` returns the real RMS level of the captured signal
 - Native library bundled in the JAR and extracted automatically on launch
 - Fine-grained negative error codes for troubleshooting
 
@@ -157,6 +158,30 @@ else if (v < -32768) v = -32768;
 > **Note:** output handles are pooled per `(sampleRate, channels)`, so the gain belongs to
 > the shared handle. With a single output line (the normal voice-chat case) this is exactly
 > what you want; with several lines sharing one handle they will share the gain too.
+
+### 8. `getLevel()` returns a real number
+
+`AndroidTargetDataLine.getLevel()` used to return `AudioSystem.NOT_SPECIFIED` — useless for
+anything that draws a level meter. Every block handed to `read()` now has its RMS amplitude
+computed in native code and stored on the stream:
+
+```c
+float lvl = (float)(sqrt(sum / ns) / 32768.0);
+ctx->level = lvl > 1.0f ? 1.0f : lvl;
+```
+
+`NativeAudio.getLevel(handle)` reads it back under the stream mutex, so it is safe to poll
+from another thread. Resulting scale: silence `0.0`, full-scale square `1.0`, full-scale
+sine `~0.707`.
+
+### 9. Zero-copy JNI array access
+
+`read()` and `write2()` used `GetByteArrayElements` / `ReleaseByteArrayElements`, which on
+many runtimes hands back a *copy* of the array plus a second copy on release. Both now use
+`GetPrimitiveArrayCritical`, so the JNI layer can work directly on the Java array.
+
+The critical section is kept to a bare `memcpy` — no other JNI calls, no allocation, no
+blocking — which is what the JNI spec requires for this mode.
 
 ---
 

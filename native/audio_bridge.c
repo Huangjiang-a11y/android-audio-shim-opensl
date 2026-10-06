@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <math.h>
 #include <unistd.h>
 #include <SLES/OpenSLES.h>
 #include <SLES/OpenSLES_Android.h>
@@ -29,6 +30,7 @@ typedef struct {
     pthread_mutex_t mutex;
     int          available;   // number of completed buffers ready to read
     int          stopping;    // set by stop()/close() to wake blocked readers
+    float        level;       // RMS level of the last read block (0.0 - 1.0)
 } InputCtx;
 
 // ============ OUTPUT (OpenSL ES player) ============
@@ -216,12 +218,27 @@ Java_de_maxhenkel_shim_NativeAudio_read(JNIEnv* env, jclass c, jint h, jbyteArra
     ctx->available--;
     pthread_mutex_unlock(&ctx->mutex);
 
-    jbyte* d = (*env)->GetByteArrayElements(env, buf, NULL);
-    if (!d) return -2;
-
     int copyLen = len < ctx->bufBytes ? len : ctx->bufBytes;
-    memcpy(d + off, ctx->bufs[ctx->readBuf % INPUT_QUEUE_BUFFERS], copyLen);
-    (*env)->ReleaseByteArrayElements(env, buf, d, 0);
+    int16_t* src = ctx->bufs[ctx->readBuf % INPUT_QUEUE_BUFFERS];
+
+    /* Observed RMS level of this block, for DataLine.getLevel() */
+    {
+        int ns = copyLen / 2;
+        if (ns > 0) {
+            double sum = 0.0;
+            for (int i = 0; i < ns; i++) {
+                double v = (double)src[i];
+                sum += v * v;
+            }
+            float lvl = (float)(sqrt(sum / ns) / 32768.0);
+            ctx->level = lvl > 1.0f ? 1.0f : lvl;
+        }
+    }
+
+    jbyte* d = (*env)->GetPrimitiveArrayCritical(env, buf, NULL);
+    if (!d) return -2;
+    memcpy(d + off, src, copyLen);
+    (*env)->ReleasePrimitiveArrayCritical(env, buf, d, 0);
 
     (*ctx->bq)->Enqueue(ctx->bq,
         ctx->bufs[ctx->readBuf % INPUT_QUEUE_BUFFERS],
@@ -344,10 +361,10 @@ Java_de_maxhenkel_shim_NativeAudioOutput_write2(JNIEnv* env, jclass c,
     if (len <= 0) return 0;
     int copyLen = len < ctx->bufBytes ? len : ctx->bufBytes;
     int idx = ctx->writeBuf % QUEUE_BUFFERS;
-    jbyte* d = (*env)->GetByteArrayElements(env, buf, NULL);
+    jbyte* d = (*env)->GetPrimitiveArrayCritical(env, buf, NULL);
     if (!d) return -2;
     memcpy(ctx->bufs[idx], d + off, copyLen);
-    (*env)->ReleaseByteArrayElements(env, buf, d, JNI_ABORT);
+    (*env)->ReleasePrimitiveArrayCritical(env, buf, d, JNI_ABORT);
 
     /* Apply software gain (MASTER_GAIN) with saturation, in place. */
     if (ctx->gain != 1.0f) {
@@ -373,4 +390,15 @@ Java_de_maxhenkel_shim_NativeAudioOutput_setGain(JNIEnv* env, jclass c, jint h, 
     if (h < 0 || h >= MAX_OUTPUT_STREAMS || !g_outputs[h]) return -1;
     g_outputs[h]->gain = gain;
     return 0;
+}
+
+JNIEXPORT jfloat JNICALL
+Java_de_maxhenkel_shim_NativeAudio_getLevel(JNIEnv* env, jclass c, jint h) {
+    if (h < 0 || h >= MAX_INPUT_STREAMS || !g_inputs[h]) return 0.0f;
+    InputCtx* ctx = g_inputs[h];
+    float lvl;
+    pthread_mutex_lock(&ctx->mutex);
+    lvl = ctx->level;
+    pthread_mutex_unlock(&ctx->mutex);
+    return lvl;
 }

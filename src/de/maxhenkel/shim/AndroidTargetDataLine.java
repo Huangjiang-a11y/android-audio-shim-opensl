@@ -84,7 +84,10 @@ return n < 0 ? 0 : n;
 @Override public long getMicrosecondPosition() {
 return (long)(framesRead * 1_000_000.0 / format.getSampleRate());
 }
-@Override public float getLevel() { return AudioSystem.NOT_SPECIFIED; }
+@Override public float getLevel() {
+if (!open.get()) return AudioSystem.NOT_SPECIFIED;
+return NativeAudio.getLevel(handle);
+}
 @Override public Line.Info getLineInfo() {
 return new DataLine.Info(TargetDataLine.class, format);
 }
