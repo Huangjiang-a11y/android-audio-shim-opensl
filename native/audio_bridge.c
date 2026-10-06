@@ -44,6 +44,7 @@ typedef struct {
     int16_t*     bufs[QUEUE_BUFFERS];
     int32_t      bufBytes;
     int32_t      writeBuf;
+    float        gain;        /* linear gain, 1.0f = unity */
 } OutputCtx;
 
 static InputCtx*  g_inputs[MAX_INPUT_STREAMS];
@@ -252,6 +253,7 @@ Java_de_maxhenkel_shim_NativeAudioOutput_open(JNIEnv* e, jclass c, jint rate, ji
 
     OutputCtx* ctx = (OutputCtx*)calloc(1, sizeof(OutputCtx));
     if (!ctx) return -201;
+    ctx->gain      = 1.0f;
     ctx->channels  = channels > 0 ? channels : 2;
     ctx->frameSize = ctx->channels * 2;
     ctx->bufBytes  = (frames > 0 ? frames : 960) * ctx->frameSize;
@@ -346,8 +348,29 @@ Java_de_maxhenkel_shim_NativeAudioOutput_write2(JNIEnv* env, jclass c,
     if (!d) return -2;
     memcpy(ctx->bufs[idx], d + off, copyLen);
     (*env)->ReleaseByteArrayElements(env, buf, d, JNI_ABORT);
+
+    /* Apply software gain (MASTER_GAIN) with saturation, in place. */
+    if (ctx->gain != 1.0f) {
+        int16_t* samples = (int16_t*)ctx->bufs[idx];
+        int      count   = copyLen / 2;
+        float    g       = ctx->gain;
+        for (int i = 0; i < count; i++) {
+            int32_t v = (int32_t)(samples[i] * g);
+            if      (v >  32767) v =  32767;
+            else if (v < -32768) v = -32768;
+            samples[i] = (int16_t)v;
+        }
+    }
+
     SLresult r = (*ctx->bq)->Enqueue(ctx->bq, ctx->bufs[idx], (SLuint32)copyLen);
     if (r != SL_RESULT_SUCCESS) return -3;
     ctx->writeBuf++;
     return copyLen;
+}
+
+JNIEXPORT jint JNICALL
+Java_de_maxhenkel_shim_NativeAudioOutput_setGain(JNIEnv* env, jclass c, jint h, jfloat gain) {
+    if (h < 0 || h >= MAX_OUTPUT_STREAMS || !g_outputs[h]) return -1;
+    g_outputs[h]->gain = gain;
+    return 0;
 }

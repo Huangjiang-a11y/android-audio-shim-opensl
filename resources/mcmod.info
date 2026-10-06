@@ -2,7 +2,7 @@
   "modid": "audioshim",
   "name": "Android Audio Shim",
   "description": "Enables Simple Voice Chat on Android (MojoLauncher/PojavLauncher).\nCompatible with Forge and Fabric, Minecraft 1.12.2+\n\nMicrophone: AAudio (mono)\nSpeaker: OpenSL ES (stereo)\nRequires: Android 8.0+, arm64",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "mcversion": "1.12.2+",
   "url": "",
   "authorList": ["GRED"],

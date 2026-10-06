@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "android-audio-shim",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "name": "Android Audio Shim",
   "description": "Enables Simple Voice Chat on Android (MojoLauncher/PojavLauncher). Forge and Fabric, Minecraft 1.12.2+",
   "authors": ["GRED"],

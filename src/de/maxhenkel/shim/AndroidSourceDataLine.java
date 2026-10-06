@@ -28,7 +28,20 @@ public class AndroidSourceDataLine implements SourceDataLine {
     private long framesWritten = 0;
 
     private final FloatControl gainControl = new FloatControl(
-            FloatControl.Type.MASTER_GAIN, -80f, 6f, 0.1f, 0, 0f, "dB") {};
+            FloatControl.Type.MASTER_GAIN, -80f, 6f, 0.1f, 0, 0f, "dB") {
+        @Override
+        public void setValue(float newValue) {
+            super.setValue(newValue);
+            pushGain();
+        }
+    };
+
+    /** Converts the current MASTER_GAIN (dB) into a linear factor and hands it to native. */
+    private void pushGain() {
+        if (handle < 0) return;
+        float db = gainControl.getValue();
+        NativeAudioOutput.setGain(handle, (float) Math.pow(10.0, db / 20.0));
+    }
 
     public AndroidSourceDataLine(AudioFormat format) { this.format = format; }
 
@@ -41,6 +54,7 @@ public class AndroidSourceDataLine implements SourceDataLine {
         handle = acquireHandle((int) format.getSampleRate(), format.getChannels());
         if (handle < 0) throw new LineUnavailableException("OpenSL output open failed: " + handle);
         open.set(true); framesWritten = 0;
+        pushGain();   /* apply the current gain to the freshly opened handle */
     }
 
     @Override public void open(AudioFormat fmt) throws LineUnavailableException { open(fmt, 0); }

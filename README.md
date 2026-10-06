@@ -22,6 +22,7 @@ with one substantial change:
 - **Output:** OpenSL ES `AudioPlayer`
 - Mono / stereo, 16-bit PCM, little endian
 - Handle-based, multi-stream capable (up to 4 inputs, 16 outputs)
+- `MASTER_GAIN` output volume control, applied natively with saturation
 - Native library bundled in the JAR and extracted automatically on launch
 - Fine-grained negative error codes for troubleshooting
 
@@ -132,6 +133,30 @@ load a mismatched cached file it cannot overwrite.
 | `-407/-408/-409` | recorder realize / get buffer-queue / get record-interface failure |
 | `-410` | callback registration failed |
 | `-200`/`-201`/`-202`/`-300` | output slot / allocation / player setup failure |
+
+### 7. `MASTER_GAIN` now actually does something
+
+`AndroidSourceDataLine` used to expose a `FloatControl` that was pure decoration — writing
+to it changed nothing. It now converts the dB value to a linear factor and hands it to the
+native layer:
+
+```java
+float linear = (float) Math.pow(10.0, db / 20.0);
+NativeAudioOutput.setGain(handle, linear);
+```
+
+`write2()` then multiplies every sample by that factor, clamping to the 16-bit range so
+loud gain cannot wrap around into distortion:
+
+```c
+int32_t v = (int32_t)(samples[i] * g);
+if      (v >  32767) v =  32767;
+else if (v < -32768) v = -32768;
+```
+
+> **Note:** output handles are pooled per `(sampleRate, channels)`, so the gain belongs to
+> the shared handle. With a single output line (the normal voice-chat case) this is exactly
+> what you want; with several lines sharing one handle they will share the gain too.
 
 ---
 

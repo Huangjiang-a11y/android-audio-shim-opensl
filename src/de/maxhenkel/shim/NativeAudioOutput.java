@@ -8,4 +8,6 @@ public class NativeAudioOutput {
     public static native int stop(int handle);
     public static native int close(int handle);
     public static native int write2(int handle, byte[] buf, int offset, int length, int frameSize);
+    /** Sets a linear gain factor applied to all written samples (1.0 = unity). */
+    public static native int setGain(int handle, float linearGain);
 }
